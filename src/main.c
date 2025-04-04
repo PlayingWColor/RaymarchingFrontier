@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <stdlib.h>
 #include <stdbool.h>
 #include <glad/gl.h>
 #include <GLFW/glfw3.h>
@@ -6,6 +7,10 @@
 void framebuffer_size_callback(GLFWwindow* window, int width, int height);
 
 void processInput(GLFWwindow *window);
+
+unsigned int loadShader(const char* vertexShader, const char* fragmentShader);
+
+long int getFileSize(FILE *filePtr);
 
 //single triangle mesh
 /*
@@ -28,18 +33,8 @@ unsigned int indices[] = {  // note that we start from 0!
     1, 2, 3    // second triangle
 }; 
 
-const char *vertexShaderSource = "#version 330 core\n"
-    "layout (location = 0) in vec3 aPos;\n"
-    "void main()\n"
-    "{\n"
-    "   gl_Position = vec4(aPos.x, aPos.y, aPos.z, 1.0);\n"
-    "}\0";
-const char *fragmentShaderSource = "#version 330 core\n"
-    "out vec4 FragColor;\n"
-    "void main()\n"
-    "{\n"
-    "   FragColor = vec4(1.0f, 0.5f, 0.2f, 1.0f);\n"
-    "}\n\0";
+const char *vertexShaderSource = "../assets/shader.vert";
+const char *fragmentShaderSource = "../assets/shader.frag";
 
 int main()
 {
@@ -68,51 +63,8 @@ int main()
 
 	glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
 	
-	//init and compile vertex shader
-	unsigned int vertexShader;
-	vertexShader = glCreateShader(GL_VERTEX_SHADER);
-	
-	glShaderSource(vertexShader, 1, &vertexShaderSource, NULL);
-	glCompileShader(vertexShader);
-	
-	int  success;
-	char infoLog[512];
-	glGetShaderiv(vertexShader, GL_COMPILE_STATUS, &success);
-	
-	if(!success)
-	{
-	    glGetShaderInfoLog(vertexShader, 512, NULL, infoLog);
-	    printf("ERROR::SHADER::VERTEX::COMPILATION_FAILED\n%s\n", infoLog);
-
-	}
-
-	//init and compile fragment shader
-	unsigned int fragmentShader;
-	fragmentShader = glCreateShader(GL_FRAGMENT_SHADER);
-	glShaderSource(fragmentShader, 1, &fragmentShaderSource, NULL);
-	glCompileShader(fragmentShader);	
-	
-	glGetShaderiv(fragmentShader, GL_COMPILE_STATUS, &success);
-	
-	if(!success)
-	{
-		glGetShaderInfoLog(fragmentShader, 512, NULL, infoLog);
-	    printf("ERROR::SHADER::FRAGMENT::COMPILATION_FAILED\n%s\n", infoLog);
-	}
-	
-	//link vertex and fragment shaders into a single program
-	unsigned int shaderProgram;
-	shaderProgram = glCreateProgram();
-	
-	glAttachShader(shaderProgram, vertexShader);
-	glAttachShader(shaderProgram, fragmentShader);
-	glLinkProgram(shaderProgram);
-	glGetProgramiv(shaderProgram, GL_LINK_STATUS, &success);
-	if(!success) {
-		glGetProgramInfoLog(shaderProgram, 512, NULL, infoLog);
-	    printf("ERROR::SHADER::PROGRAM::LINKING_FAILED\n%s\n", infoLog);
-	}
-
+	unsigned int shaderID = loadShader(vertexShaderSource,fragmentShaderSource);
+			
 	//mark shader program to be used for rendering
 	unsigned int VAO;
 	glGenVertexArrays(1, &VAO); 
@@ -148,13 +100,11 @@ int main()
 
 		// ..:: Drawing code (in render loop) :: ..
 		// 4. draw the object
-		glUseProgram(shaderProgram);
+		glUseProgram(shaderID);
 		glBindVertexArray(VAO);
 		glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
 		glBindVertexArray(0);
 		
-		glDeleteShader(vertexShader);
-		glDeleteShader(fragmentShader); 
 	
 		//display render to screen
 		glfwSwapBuffers(window);
@@ -175,4 +125,125 @@ void processInput(GLFWwindow *window)
 {
     if(glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
         glfwSetWindowShouldClose(window, true);
+}
+unsigned int loadShader(const char* vertexShader, const char* fragmentShader)
+{
+	int success;
+	char infoLog[512];
+
+	FILE* vertFilePtr = fopen(vertexShader, "r");
+	if (vertFilePtr == NULL) {
+		printf("Cannot open %s", vertexShader);
+    	return -1;
+	}
+	long int vertFileSize = getFileSize(vertFilePtr);
+	char vertexShaderCodeArray[vertFileSize];
+
+	char next = '\0';
+	int index = 0;
+	while(next != EOF)
+	{
+		next = fgetc(vertFilePtr);
+		vertexShaderCodeArray[index] = next;
+		index++;
+	}
+	
+	vertexShaderCodeArray[index] = '\0';
+
+	const char* vertexShaderCode = &vertexShaderCodeArray[0];
+
+	unsigned int vertexID = glCreateShader(GL_VERTEX_SHADER);
+	glShaderSource(vertexID, 1, &vertexShaderCode, NULL);
+	glCompileShader(vertexID);
+
+	glGetShaderiv(vertexID, GL_COMPILE_STATUS, &success);
+
+	if(!success)
+	{
+	    glGetShaderInfoLog(vertexID, 512, NULL, infoLog);
+	    printf("ERROR::SHADER::FRAGMENT::COMPILATION_FAILED\n%s\n", infoLog);
+    	return -1;
+	}
+
+	FILE* filePtr = fopen(fragmentShader, "r");
+	if (filePtr == NULL) {
+		printf("Cannot open %s", fragmentShader);
+    	return -1;
+	}
+	long int fileSize = getFileSize(filePtr);
+	char fragmentShaderCodeArray[fileSize];
+
+	next = '\0';
+	index = 0;
+	while(next != EOF)
+	{
+		next = fgetc(filePtr);
+		fragmentShaderCodeArray[index] = next;
+		index++;
+	}
+
+	fragmentShaderCodeArray[index] = '\0';
+
+	const char* fragmentShaderCode = &fragmentShaderCodeArray[0];
+
+	unsigned int fragmentID = glCreateShader(GL_FRAGMENT_SHADER);
+	glShaderSource(fragmentID, 1, &fragmentShaderCode, NULL);
+	glCompileShader(fragmentID);
+
+	glGetShaderiv(fragmentID, GL_COMPILE_STATUS, &success);
+
+	if(!success)
+	{
+	    glGetShaderInfoLog(fragmentID, 512, NULL, infoLog);
+	    printf("ERROR::SHADER::FRAGMENT::COMPILATION_FAILED\n%s\n", infoLog);
+    	return -1;
+	}
+
+	unsigned int shaderID = glCreateProgram();
+	glAttachShader(shaderID, vertexID);
+	glAttachShader(shaderID, fragmentID);
+	glLinkProgram(shaderID);
+	// print linking errors if any
+	glGetProgramiv(shaderID, GL_LINK_STATUS, &success);
+	if(!success)
+	{
+		glGetProgramInfoLog(shaderID, 512, NULL, infoLog);
+	    printf("ERROR::SHADER::PROGRAM::LINKING_FAILED\n%s\n", infoLog);
+	}
+
+	glDeleteShader(vertexID);
+	glDeleteShader(fragmentID);
+
+	return shaderID;
+}
+
+long int getFileSize(FILE *filePtr)
+{
+	fpos_t pos;
+	if (fgetpos(filePtr, &pos) != 0)
+	{
+		printf("get position failed");
+    	return -1;
+	}
+	
+	if(fseek(filePtr, 0, SEEK_END) != 0)
+	{
+		printf("Seek to end of file failed");
+    	return -1;
+	}
+
+	long int filePos = ftell(filePtr);
+	if(filePos == -1L)
+	{
+		printf("Failed to get file position");
+    	return -1;
+	}
+
+	if (fsetpos(filePtr, &pos) != 0)
+	{
+		printf("set position failed");
+    	return -1;
+	}
+
+	return filePos;
 }
