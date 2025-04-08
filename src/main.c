@@ -4,13 +4,19 @@
 #include <glad/gl.h>
 #include <GLFW/glfw3.h>
 
-void framebuffer_size_callback(GLFWwindow* window, int width, int height);
+#define SCREEN_WIDTH 1920
+#define SCREEN_HEIGHT 1080
+#define PROGRAM_NAME "PwCRevision2025"
 
-void processInput(GLFWwindow *window);
+void framebuffer_size_callback(GLFWwindow* window, int width, int height);
 
 unsigned int loadShader(const char* vertexShader, const char* fragmentShader);
 
 long int getFileSize(FILE *filePtr);
+
+void inputCallback(GLFWwindow *window, int key, int scancode, int action, int mods);
+
+GLFWwindow *ToggleFullScreen(GLFWwindow *window);
 
 //single triangle mesh
 /*
@@ -23,18 +29,22 @@ float vertices[] = {
 
 //rectangle mesh
 float vertices[] = {
-     0.5f,  0.5f, 0.0f,  // top right
-     0.5f, -0.5f, 0.0f,  // bottom right
-    -0.5f, -0.5f, 0.0f,  // bottom left
-    -0.5f,  0.5f, 0.0f   // top left 
+     1.0f,  1.0f, 0.0f,  // top right
+     1.0f, -1.0f, 0.0f,  // bottom right
+    -1.0f, -1.0f, 0.0f,  // bottom left
+    -1.0f,  1.0f, 0.0f   // top left 
 };
-unsigned int indices[] = {  // note that we start from 0!
+unsigned int indices[] = {  
     0, 1, 3,   // first triangle
     1, 2, 3    // second triangle
 }; 
 
 const char *vertexShaderSource = "../assets/shader.vert";
 const char *fragmentShaderSource = "../assets/shader.frag";
+
+unsigned int shaderID = -1;
+GLint viewportSizeLoc = -1;
+
 
 int main()
 {
@@ -44,7 +54,9 @@ int main()
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
 	glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 	
-	GLFWwindow* window = glfwCreateWindow(800, 600, "LearnOpenGL", NULL, NULL);
+	GLFWwindow* window = glfwCreateWindow(SCREEN_WIDTH, SCREEN_HEIGHT, 
+											PROGRAM_NAME, NULL, NULL);
+	
 	if (window == NULL)
 	{
 		printf("Failed to create GLFW window\r\n");
@@ -59,12 +71,19 @@ int main()
     		return -1;
 	}   
 	//set viewport size
-	glViewport(0, 0, 800, 600);
+	glViewport(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
 
 	glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
+
+	glfwSetKeyCallback(window, inputCallback);
+
+	shaderID = loadShader(vertexShaderSource,fragmentShaderSource);
+	glUseProgram(shaderID);
+	viewportSizeLoc = glGetUniformLocation(shaderID,"viewportSize");
+	printf("viewportSizeLoc:%d\r\n",viewportSizeLoc);
+	printf("shaderID:%d\r\n",shaderID);
+	glUniform2f(viewportSizeLoc, SCREEN_WIDTH, SCREEN_HEIGHT);
 	
-	unsigned int shaderID = loadShader(vertexShaderSource,fragmentShaderSource);
-			
 	//mark shader program to be used for rendering
 	unsigned int VAO;
 	glGenVertexArrays(1, &VAO); 
@@ -92,7 +111,8 @@ int main()
 	while(!glfwWindowShouldClose(window))
 	{
 		//begin render
-		processInput(window);
+
+
 		//paint window color
 		glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
 		glClear(GL_COLOR_BUFFER_BIT);
@@ -119,12 +139,58 @@ int main()
 void framebuffer_size_callback(GLFWwindow* window, int width, int height)
 {
     glViewport(0, 0, width, height);
+	glUniform2f(viewportSizeLoc, width, height);
 }
 
-void processInput(GLFWwindow *window)
+void inputCallback(GLFWwindow *window, int key, int scancode, int action, int mods)
 {
-    if(glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
+	if(key == GLFW_KEY_ESCAPE)
         glfwSetWindowShouldClose(window, true);
+	
+	if(key == GLFW_KEY_F11 && action == GLFW_PRESS)
+		ToggleFullScreen(window);
+}
+
+int windowedWidth = 0;
+int windowedHeight = 0;
+int windowedXPos = 0;
+int windowedYPos = 0;
+GLFWwindow* ToggleFullScreen(GLFWwindow *window)
+{
+	if(window == NULL)
+	{
+		printf("GLFW window does not exist!\r\n");
+		return NULL;
+	}
+	GLFWmonitor* windowMonitor = glfwGetWindowMonitor(window);
+	
+	GLFWmonitor* primaryMonitor = glfwGetPrimaryMonitor();
+	const GLFWvidmode *vidmode = glfwGetVideoMode(primaryMonitor);
+	
+	if(windowMonitor == NULL)
+	{
+		glfwGetWindowSize(window, &windowedWidth, &windowedHeight);
+		glfwGetWindowPos(window, &windowedXPos, &windowedYPos);
+		glfwSetWindowMonitor(
+			window, 
+			primaryMonitor, 
+			0,0,
+			vidmode->width,
+			vidmode->height,
+			vidmode->refreshRate
+		);
+	}
+	else
+	{
+		glfwSetWindowMonitor(
+			window,
+			NULL,
+			windowedXPos, windowedYPos,
+			windowedWidth, windowedHeight,
+			vidmode->refreshRate
+		);
+	}
+	return window;
 }
 unsigned int loadShader(const char* vertexShader, const char* fragmentShader)
 {
