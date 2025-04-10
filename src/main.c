@@ -44,7 +44,7 @@ const char *fragmentShaderSource = "../assets/shader.frag";
 
 unsigned int shaderID = -1;
 GLint viewportSizeLoc = -1;
-
+GLint timeLoc = -1;
 
 int main()
 {
@@ -80,10 +80,11 @@ int main()
 	shaderID = loadShader(vertexShaderSource,fragmentShaderSource);
 	glUseProgram(shaderID);
 	viewportSizeLoc = glGetUniformLocation(shaderID,"viewportSize");
+	timeLoc = glGetUniformLocation(shaderID,"time");
 	printf("viewportSizeLoc:%d\r\n",viewportSizeLoc);
 	printf("shaderID:%d\r\n",shaderID);
 	glUniform2f(viewportSizeLoc, SCREEN_WIDTH, SCREEN_HEIGHT);
-	
+
 	//mark shader program to be used for rendering
 	unsigned int VAO;
 	glGenVertexArrays(1, &VAO); 
@@ -108,20 +109,27 @@ int main()
 
 	glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
 
+	float timeArray[4] = {-1};
 	while(!glfwWindowShouldClose(window))
 	{
 		//begin render
 
-
 		//paint window color
 		glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
 		glClear(GL_COLOR_BUFFER_BIT);
-		
 
 		// ..:: Drawing code (in render loop) :: ..
 		// 4. draw the object
 		glUseProgram(shaderID);
 		glBindVertexArray(VAO);
+
+		//set uniforms
+		timeArray[1] = glfwGetTime();
+		timeArray[0] = timeArray[1] * 0.05;
+		timeArray[2] = timeArray[1] * 2.0;
+		timeArray[3] = timeArray[1] * 3.0;
+		glUniform4fv(timeLoc, 1, (float*)(&timeArray[0]));
+		
 		glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
 		glBindVertexArray(0);
 		
