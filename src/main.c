@@ -21,22 +21,22 @@ GLFWwindow *ToggleFullScreen(GLFWwindow *window);
 //single triangle mesh
 /*
 float vertices[] = {
-    -0.5f, -0.5f, 0.0f,
-     0.5f, -0.5f, 0.0f,
-     0.0f,  0.5f, 0.0f
+	-0.5f, -0.5f, 0.0f,
+	 0.5f, -0.5f, 0.0f,
+	 0.0f,  0.5f, 0.0f
 };
 */
 
 //rectangle mesh
 float vertices[] = {
-     1.0f,  1.0f, 0.0f,  // top right
-     1.0f, -1.0f, 0.0f,  // bottom right
-    -1.0f, -1.0f, 0.0f,  // bottom left
-    -1.0f,  1.0f, 0.0f   // top left 
+	 1.0f,  1.0f, 0.0f,  // top right
+	 1.0f, -1.0f, 0.0f,  // bottom right
+	-1.0f, -1.0f, 0.0f,  // bottom left
+	-1.0f,  1.0f, 0.0f   // top left 
 };
 unsigned int indices[] = {  
-    0, 1, 3,   // first triangle
-    1, 2, 3    // second triangle
+	0, 1, 3,   // first triangle
+	1, 2, 3	// second triangle
 }; 
 
 const char *vertexShaderSource = "../assets/shader.vert";
@@ -61,14 +61,14 @@ int main()
 	{
 		printf("Failed to create GLFW window\r\n");
 		glfwTerminate();
-    		return -1;
+			return -1;
 	}
 	glfwMakeContextCurrent(window);
 	
 	if (!gladLoadGL((GLADloadfunc)glfwGetProcAddress))
 	{
-    		printf("Failed to initialize GLAD\r\n");
-    		return -1;
+			printf("Failed to initialize GLAD\r\n");
+			return -1;
 	}   
 	//set viewport size
 	glViewport(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
@@ -110,6 +110,7 @@ int main()
 	glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
 
 	float timeArray[4] = {-1};
+	int lastSecond = 0;
 	while(!glfwWindowShouldClose(window))
 	{
 		//begin render
@@ -124,7 +125,7 @@ int main()
 		glBindVertexArray(VAO);
 
 		//set uniforms
-		timeArray[1] = glfwGetTime();
+		timeArray[1] = glfwGetTime() + 70.0;
 		timeArray[0] = timeArray[1] * 0.05;
 		timeArray[2] = timeArray[1] * 2.0;
 		timeArray[3] = timeArray[1] * 3.0;
@@ -132,11 +133,17 @@ int main()
 		
 		glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
 		glBindVertexArray(0);
+			
 		
-	
 		//display render to screen
 		glfwSwapBuffers(window);
-		glfwPollEvents();    
+		glfwPollEvents(); 
+		
+		if(timeArray[1] > lastSecond + 1)
+		{		
+			lastSecond = timeArray[1];
+			printf("Time : %i\r\n",lastSecond);
+		}
 	}
 	
 	glfwTerminate();
@@ -146,14 +153,14 @@ int main()
 
 void framebuffer_size_callback(GLFWwindow* window, int width, int height)
 {
-    glViewport(0, 0, width, height);
+	glViewport(0, 0, width, height);
 	glUniform2f(viewportSizeLoc, width, height);
 }
 
 void inputCallback(GLFWwindow *window, int key, int scancode, int action, int mods)
 {
 	if(key == GLFW_KEY_ESCAPE)
-        glfwSetWindowShouldClose(window, true);
+		glfwSetWindowShouldClose(window, true);
 	
 	if(key == GLFW_KEY_F11 && action == GLFW_PRESS)
 		ToggleFullScreen(window);
@@ -208,7 +215,7 @@ unsigned int loadShader(const char* vertexShader, const char* fragmentShader)
 	FILE* vertFilePtr = fopen(vertexShader, "r");
 	if (vertFilePtr == NULL) {
 		printf("Cannot open %s", vertexShader);
-    	return -1;
+		return -1;
 	}
 	long int vertFileSize = getFileSize(vertFilePtr);
 	char vertexShaderCodeArray[vertFileSize];
@@ -234,15 +241,15 @@ unsigned int loadShader(const char* vertexShader, const char* fragmentShader)
 
 	if(!success)
 	{
-	    glGetShaderInfoLog(vertexID, 512, NULL, infoLog);
-	    printf("ERROR::SHADER::FRAGMENT::COMPILATION_FAILED\n%s\n", infoLog);
-    	return -1;
+		glGetShaderInfoLog(vertexID, 512, NULL, infoLog);
+		printf("ERROR::SHADER::FRAGMENT::COMPILATION_FAILED\n%s\n", infoLog);
+		return -1;
 	}
 
 	FILE* filePtr = fopen(fragmentShader, "r");
 	if (filePtr == NULL) {
 		printf("Cannot open %s", fragmentShader);
-    	return -1;
+		return -1;
 	}
 	long int fileSize = getFileSize(filePtr);
 	char fragmentShaderCodeArray[fileSize];
@@ -268,9 +275,9 @@ unsigned int loadShader(const char* vertexShader, const char* fragmentShader)
 
 	if(!success)
 	{
-	    glGetShaderInfoLog(fragmentID, 512, NULL, infoLog);
-	    printf("ERROR::SHADER::FRAGMENT::COMPILATION_FAILED\n%s\n", infoLog);
-    	return -1;
+		glGetShaderInfoLog(fragmentID, 512, NULL, infoLog);
+		printf("ERROR::SHADER::FRAGMENT::COMPILATION_FAILED\n%s\n", infoLog);
+		return -1;
 	}
 
 	unsigned int shaderID = glCreateProgram();
@@ -282,7 +289,7 @@ unsigned int loadShader(const char* vertexShader, const char* fragmentShader)
 	if(!success)
 	{
 		glGetProgramInfoLog(shaderID, 512, NULL, infoLog);
-	    printf("ERROR::SHADER::PROGRAM::LINKING_FAILED\n%s\n", infoLog);
+		printf("ERROR::SHADER::PROGRAM::LINKING_FAILED\n%s\n", infoLog);
 	}
 
 	glDeleteShader(vertexID);
@@ -297,26 +304,26 @@ long int getFileSize(FILE *filePtr)
 	if (fgetpos(filePtr, &pos) != 0)
 	{
 		printf("get position failed");
-    	return -1;
+		return -1;
 	}
 	
 	if(fseek(filePtr, 0, SEEK_END) != 0)
 	{
 		printf("Seek to end of file failed");
-    	return -1;
+		return -1;
 	}
 
 	long int filePos = ftell(filePtr);
 	if(filePos == -1L)
 	{
 		printf("Failed to get file position");
-    	return -1;
+		return -1;
 	}
 
 	if (fsetpos(filePtr, &pos) != 0)
 	{
 		printf("set position failed");
-    	return -1;
+		return -1;
 	}
 
 	return filePos;

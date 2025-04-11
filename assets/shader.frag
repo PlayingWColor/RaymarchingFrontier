@@ -8,7 +8,7 @@ varying vec3 rayOrigin;
 uniform vec2 viewportSize;
 uniform vec4 time;
 
-const float MAX_MARCH_DIS = 25.0;
+const float MAX_MARCH_DIS = 100.0;
 const int MAX_MARCH_STEPS = 128;
 const int CLOUD_RESOLUTION = 64;
 
@@ -24,6 +24,21 @@ struct SurfaceData
 	float shine;
 	float metal;
 };
+
+struct VolumeData
+{
+	vec4 col;
+	float density;
+	float absorb;
+};
+//HUEtoRGB by chilli ant - https://www.chilliant.com/rgb2hsv.html
+vec3 HUEtoRGB(in float H)
+{
+    float R = abs(H * 6 - 3) - 1;
+    float G = 2 - abs(H * 6 - 2);
+    float B = 2 - abs(H * 6 - 4);
+    return clamp(vec3(R,G,B),0.0,1.0);
+}
 
 //modified noise, original from : https://www.shadertoy.com/view/4dS3Wd
 float hash(float p) { p = fract(p * 0.011); p *= p + 7.5; p *= p + p; return fract(p); }
@@ -177,12 +192,12 @@ vec3 dancingOctahedron(vec3 rayPos, float timeOffset)
 
 	return rotRayPos;
 }
-SurfaceData Part1DancingOctohedrons(in vec3 rayPos)
+SurfaceData Part1DancingOctohedrons(in vec3 rayPos, in float timeOffset)
 {
-	vec3 rotRayPos0 = dancingOctahedron(rayPos, 0.0);
-	vec3 rotRayPos1 = dancingOctahedron(rayPos, -1.5);
-	vec3 rotRayPos2 = dancingOctahedron(rayPos, -3.0);
-	vec3 rotRayPos3 = dancingOctahedron(rayPos, -4.5);
+	vec3 rotRayPos0 = dancingOctahedron(rayPos, -timeOffset + 0.0);
+	vec3 rotRayPos1 = dancingOctahedron(rayPos, -timeOffset - 1.5);
+	vec3 rotRayPos2 = dancingOctahedron(rayPos, -timeOffset - 3.0);
+	vec3 rotRayPos3 = dancingOctahedron(rayPos, -timeOffset - 4.5);
 	
 	SurfaceData result;
 	SurfaceData result1;
@@ -211,19 +226,23 @@ SurfaceData Part1DancingOctohedrons(in vec3 rayPos)
 
 	return result;
 }
-SurfaceData Part2Kaleidoscope(in vec3 rayPos)
+SurfaceData Part2Kaleidoscope(in vec3 rayPos, in float timeOffset)
 {
 	SurfaceData result;
+	const float endTime = 20;	
+	float endTrans = clamp((time.y-timeOffset-endTime)*0.00025,0.0,1.0);
 
 	const vec3 spacing = vec3(1.5, 1.5, 0.1);
 
-	vec3 rayPos1 = rayPos + vec3(0.5,0.0,time.w * 10);
+	vec3 rayPos1 = rayPos + vec3(-1.25,-0.75,-(time.w-timeOffset * 3.0) * 10 - 0.75);
 	
 	rayPos1 = rotateZ(rayPos1, rayPos1.z * 0.025, vec3(0.0,0.0,rayPos1.z));
 
 	vec3 offsetPos = rayPos1 + vec3(2.0,2.0,2.0);
 
-	vec3 cubes = offsetPos - spacing * round(offsetPos/spacing);
+	vec3 cubes = round(offsetPos/spacing);
+	cubes.z = mix(min(cubes.z,0.0),max(cubes.z,-endTime * 3.0 * 10 - 500), endTrans);
+	cubes = offsetPos - spacing * cubes;
 	//cubes = rotateZ(cubes, rayPos1.z, vec3(0.0, 0.0, rayPos1.z));
 
 	result.dis = cube(cubes, vec3(0.1));
@@ -231,23 +250,27 @@ SurfaceData Part2Kaleidoscope(in vec3 rayPos)
 	
 	SurfaceData result1;
 
-	vec3 rayPos2 = rayPos + vec3(1.25,0.75,time.w*10 + 0.75);
+	vec3 rayPos2 = rayPos + vec3(1.25,0.75,-(time.w-timeOffset * 3.0) * 10 + 0.75);
 	
 	rayPos2 = rotateZ(rayPos2, rayPos2.z * -0.025, vec3(0.0,0.0,rayPos2.z));
 
 	vec3 offsetPos2 = rayPos2 + vec3(2.0,2.0,2.0);
 
-	vec3 cubes2 = offsetPos2 - spacing * round(offsetPos2/spacing);
+	vec3 cubes2 = round(offsetPos2/spacing);
+	cubes2.z = mix(min(cubes2.z,0.0),max(cubes.z,-endTime * 3.0 * 10 - 100), endTrans);
+	cubes2 = offsetPos2 - spacing * cubes2;
 
 	result1.dis = cube(cubes2, vec3(0.1));
-	result1.col = vec3(0.8,0.8,0.8);
+
+	float rainBowTrans = clamp((time.y-timeOffset-10),0.0,1.0);
+
+	result1.col = mix(vec3(0.8),HUEtoRGB(mod(rayPos2.z*0.1,1.0)) + vec3(0.25),rainBowTrans);
 
 	result = closest(result, result1);
 
-	result.emit = 0.4;
+	result.emit = mix(0.4,1.5,rainBowTrans);
 	result.shine = 0.1;
 	result.metal = 0.0;
-
 
 	return result;
 }
@@ -256,32 +279,86 @@ float waveDisplacement(vec2 pos, vec2 dir, float freq, float t)
 {
 	return exp(sin(dot(dir,pos) * freq + t))-1.5;
 }
-
-SurfaceData Part3CubeOcean(in vec3 rayPos)
+SurfaceData Part3CubeOcean(in vec3 rayPos, in float timeOffset)
 {
 	SurfaceData result;
+	
+	vec3 offsetPos = rayPos + vec3(0.0,max(8.0,(-time.y+timeOffset)*4.0 + 68.0),time.w*3);
+	
+	float ylimit = 1.0;
+	vec3 spacing = vec3(2.0);
+	
+	vec3 cubesID = round(offsetPos/spacing);
+	vec3 cubesOff = sign(offsetPos - spacing * cubesID);
+	result.dis = MAX_MARCH_DIS;
+	if(rayPos.y > time.y)
+		return result;
 
-	float displacement = waveDisplacement(rayPos.xz, vec2(0.4,0.6), 0.2, time.w)*0.025;
-	displacement += waveDisplacement(rayPos.xz, vec2(0.1,0.9), 2.2, time.w)*0.05;
-	displacement += waveDisplacement(rayPos.xy, vec2(0.672,0.238), 2.4, time.w)*0.1;
-	displacement += waveDisplacement(rayPos.xy, vec2(0.81,0.19), 3.7, time.w)*0.2;
-	displacement += waveDisplacement(rayPos.xy, vec2(0.45,0.55), 0.4, time.w)*0.12;	
+	for(int i=0; i<2; i++)
+	for(int j=0; j<2; j++)
+	for(int k=0; k<2; k++)
+	{
+		vec3 cubesRID = cubesID + vec3(i,j,k)*cubesOff;
+		cubesRID.y = clamp(cubesRID.y, -ylimit,ylimit);
+		vec3 cubes = offsetPos - spacing * cubesRID;	
+		vec3 gridPos3D = round(cubesRID);
+		vec2 gridPos = gridPos3D.xz;
+		vec3 color = noise3D(vec3(gridPos+vec2(0.25),1.0));
 
-	result.dis = infinitePlane(rayPos, -1.0) - displacement;
-	result.col = vec3(0.1,0.6,0.96);
+		float displacement = waveDisplacement(gridPos, vec2(0.4,0.6), 0.2, time.w)*0.025;
+		displacement += waveDisplacement(gridPos, vec2(0.1,-0.9), 1.2, time.w)*0.05;
+		displacement += waveDisplacement(gridPos, vec2(0.672,0.238), 1.8, time.w)*0.1;
+		displacement += waveDisplacement(gridPos, vec2(-0.81,0.19), 2.7, time.w)*0.2;
+		displacement += waveDisplacement(gridPos, vec2(0.45,-0.55), 3.4, time.w)*0.12;	
+		displacement += waveDisplacement(gridPos, vec2(0.3,-0.7), 6.0, time.w)*0.03;	
+		displacement += waveDisplacement(gridPos, vec2(-0.15,-0.85), 7.0, time.w)*0.02;	
+		displacement += waveDisplacement(gridPos, vec2(0.95,-0.05), 8.0, time.w)*0.04;	
+
+		vec3 halfColor = color - vec3(0.5);
+
+		cubes.y -= displacement * 2.0;
+		cubes = rotateX(cubes, (halfColor.x) * (0.5 + time.x * halfColor.y), vec3(0.0));
+		cubes = rotateY(cubes, (halfColor.y) * (0.5 + time.x * halfColor.z), vec3(0.0));
+		cubes = rotateZ(cubes, (halfColor.z) * (0.5 + time.x * halfColor.x), vec3(0.0));
+
+
+		float newDis = cube(cubes, vec3(0.8));
+		if(newDis < result.dis)
+		{
+			result.dis = newDis;
+			result.col = color;
+		}
+	}
 	result.emit = 0.0;
 	result.shine = 0.5;
-	result.metal = 1.0;
-
+	result.metal = 0.0;
+	
 	return result;
+
+	//bad ocean color = vec3(0.2,0.5,0.75);
+
 }
 SurfaceData surfaceComposite(in vec3 rayPos)
 {
-	SurfaceData result = Part3CubeOcean(rayPos); 
+	SurfaceData result = Part0AlienOrb(rayPos); 
+	result = closest(result, Part1DancingOctohedrons(rayPos, 12.0));
+	result = closest(result, Part2Kaleidoscope(rayPos, 43.0));
+	result = closest(result, Part3CubeOcean(rayPos, 75.0));
+	return result;
+}
+VolumeData volumeComposite(in vec3 rayPos)
+{
+	VolumeData result;
+	
+	vec3 offsetPos = rayPos + vec3(0.0,max(-18.0,(-time.y+75.0)*4.0 + 40.0),0.0);
+
+	result.density = clamp((cloud(offsetPos*0.2)-0.35),0.0,1.0) * 0.2 * clamp(pow(offsetPos.y-10.0,3),0.0,1.0) * clamp(pow(41.0-offsetPos.y, 3) * 0.01,0.0,1.0);
+	result.density = mix(result.density,0.0,clamp(-time.y+75.0,0.0,1.0));
+	result.col = vec4(vec3(0.95),1.0);
+	result.absorb = 0.004;
 
 	return result;
 }
-
 vec3 calcNormal(in vec3 position)
 {
 	const float offset = 0.001;
@@ -320,10 +397,17 @@ vec3 world1kaleidoscope(in vec3 skyPos)
 
 vec3 world2sky(in vec3 skyPos)
 {
-	vec3 background = mix(vec3(0.859,0.871,0.69),vec3(0.475,0.745,0.949),clamp(skyPos.y*10.0+2.0,0.0,1.0));
+	vec3 background = mix(vec3(0.475,0.745,0.949),vec3(0.475,0.745,0.949),clamp(skyPos.y*10.0+2.0,0.0,1.0));
+	background = mix(background, vec3(0.375,0.375,0.778),clamp(skyPos.y - 0.0, 0.0, 1.0));
+
 	return background;
 }
+vec3 worldComposite(in vec3 skyPos)
+{
+	float firstTrans = clamp(time.y-70-skyPos.y,0.0,1.0);
 
+	return mix(world0space(skyPos),world2sky(skyPos-vec3(0.0,firstTrans-1.0,0.0)), firstTrans);
+}
 void main()
 {
     float aspect = viewportSize.x / viewportSize.y;
@@ -332,13 +416,15 @@ void main()
 
     vec3 rayOrigin = vec3(0.0,0.0,0.0);
     vec3 rayDir = normalize(vec3(scaledUV,1.0));
-   
+  	//rayDir = rotateX(rayDir, 0.7, rayOrigin);
+
+
     SurfaceData totalResult;
     totalResult.dis = 0.0;
 
     SurfaceData reflectResult;
     reflectResult.dis = 0.0;
-    
+    //directional light
     for(int i = 0; i < MAX_MARCH_STEPS; i++)
     {
         vec3 rayPos = rayOrigin + rayDir * totalResult.dis;
@@ -353,7 +439,28 @@ void main()
         if(result.dis < 0.0001 || totalResult.dis > MAX_MARCH_DIS)
             break;
     }
-        
+
+	VolumeData volumeResult;
+	volumeResult.col = vec4(0.0);
+	volumeResult.density = 0.0;
+	volumeResult.absorb = 0.0;
+	const float volumeStep = 0.5;
+	int stepCount = 0;
+    //volumes
+    for(float vDis = 0.0; vDis < totalResult.dis; vDis += volumeStep)
+    {
+        vec3 rayPos = rayOrigin + rayDir * vDis;
+
+        VolumeData result = volumeComposite(rayPos);
+        volumeResult.density += result.density * volumeStep;
+        volumeResult.absorb += result.absorb * volumeStep;
+		volumeResult.col += result.col;
+
+		stepCount++;
+    }
+	volumeResult.col /= stepCount;
+	volumeResult.col.a *= volumeResult.density;
+
     vec3 rayPos = rayOrigin + rayDir * totalResult.dis;
     vec3 normal = calcNormal(rayPos);
     vec3 reflectRayDir = reflect(rayDir, normal);
@@ -361,23 +468,25 @@ void main()
 	
 	float totalRough = 1.0 - totalResult.shine;
 
-    vec3 worldReflect = world2sky(mix(reflectRayDir,noise3D(reflectRayDir * 1000), totalRough * 0.5)) + 
-						world2sky(mix(reflectRayDir,noise3D(reflectRayDir * 1010), totalRough * 0.5)) + 
-						world2sky(mix(reflectRayDir,noise3D(reflectRayDir * 1020), totalRough * 0.5)) +
-						world2sky(mix(reflectRayDir,noise3D(reflectRayDir * 1040), totalRough * 0.5));
-   
-	worldReflect = worldReflect * 0.25;
+    vec3 worldReflect = vec3(0);
+  	
+	for(int i = 0; i < 32; i++)
+	{
+		worldReflect += worldComposite(mix(reflectRayDir,noise3D(reflectRayDir * (1000 + i * 11)), totalRough * 0.5)); 
+	}
+	worldReflect = worldReflect / 32.0;
+
+	const vec3 sun = vec3(0.5,0.8,-0.7);
 
 	if (totalResult.dis >= MAX_MARCH_DIS)
     {
-        FragColor = vec4(world2sky(rayDir), 1.0); 
+        FragColor = vec4(worldComposite(rayDir), 1.0); 
     }
     else
     {
         vec3 rayPos = rayOrigin + rayDir * totalResult.dis;
 		vec3 normal = calcNormal(rayPos);
 
-		vec3 sun = vec3(0.5,0.8,-0.7);
 
 		float lambert = clamp(dot(normal, sun),0.0,1.0);
 
@@ -395,4 +504,18 @@ void main()
                  vec3(0.01,0.01,0.01)) + clamp(reflectCol - 0.75,0.0,1.0),1.0);
 	}
 
+	//apply volume to FragColor
+	{
+		//vec3 normal = rayDir;
+		//float lambert = clamp(dot(normal, sun), 0.0,1.0);
+		vec3 fakeIndirect = world2sky(vec3(0.0,1.0,0.0));
+		//vec3 subsurface = clamp(vec3(dot(-normal, sun)) - vec3(volumeResult.absorb), vec3(0.0),vec3(1.0));
+
+		FragColor = mix(FragColor, vec4(mix(volumeResult.col.rgb + fakeIndirect,vec3(0.0,0.2,0.4),clamp(volumeResult.absorb,0.0,1.0)),1.0), volumeResult.col.a);
+	}
+
+	//fade to and from black
+	{
+		FragColor = mix(vec4(vec3(0.0),1.0), FragColor, sCurve(clamp((time.y-2.0)*0.4,0.0,1.0)));
+	}
 } 
