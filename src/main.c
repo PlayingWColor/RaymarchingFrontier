@@ -111,6 +111,7 @@ int main()
 
 	float timeArray[4] = {-1};
 	int lastSecond = 0;
+	int fps = 0;
 	while(!glfwWindowShouldClose(window))
 	{
 		//begin render
@@ -125,7 +126,7 @@ int main()
 		glBindVertexArray(VAO);
 
 		//set uniforms
-		timeArray[1] = glfwGetTime() + 70.0;
+		timeArray[1] = glfwGetTime();
 		timeArray[0] = timeArray[1] * 0.05;
 		timeArray[2] = timeArray[1] * 2.0;
 		timeArray[3] = timeArray[1] * 3.0;
@@ -138,11 +139,13 @@ int main()
 		//display render to screen
 		glfwSwapBuffers(window);
 		glfwPollEvents(); 
-		
+		fps++;
 		if(timeArray[1] > lastSecond + 1)
 		{		
 			lastSecond = timeArray[1];
-			printf("Time : %i\r\n",lastSecond);
+			printf("Time : %i|",lastSecond);
+			printf("FPS : %i\r\n",fps);
+			fps = 0;
 		}
 	}
 	

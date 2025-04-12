@@ -9,13 +9,15 @@ uniform vec2 viewportSize;
 uniform vec4 time;
 
 const float MAX_MARCH_DIS = 100.0;
-const int MAX_MARCH_STEPS = 128;
+const int MAX_MARCH_STEPS = 64;
 const int CLOUD_RESOLUTION = 64;
 
 #define PI 3.1415927
 #define M1 15973346     //1719413*929
 #define M2 38120158     //140473*2467*11
-                          
+
+//#define RENDER_VOLUME
+
 struct SurfaceData
 {
 	float dis;
@@ -284,7 +286,9 @@ SurfaceData Part3CubeOcean(in vec3 rayPos, in float timeOffset)
 	SurfaceData result;
 	
 	vec3 offsetPos = rayPos + vec3(0.0,max(8.0,(-time.y+timeOffset)*4.0 + 68.0),time.w*3);
-	
+
+	offsetPos.y = offsetPos.y - max(0.0,(time.y-timeOffset-25.0)*4.0);
+
 	float ylimit = 1.0;
 	vec3 spacing = vec3(2.0);
 	
@@ -338,15 +342,58 @@ SurfaceData Part3CubeOcean(in vec3 rayPos, in float timeOffset)
 	//bad ocean color = vec3(0.2,0.5,0.75);
 
 }
+SurfaceData Part4TrippyEffects(in vec3 rayPos, float timeOffset)
+{
+	SurfaceData result;
+
+	vec3 tripRayPos = mix(rayPos,vec3(sin(rayPos.x),sin(rayPos.y),1.0),clamp((time.y-timeOffset-10)*0.01,0.0,1.0));
+
+	float displacement = cloud(vec3(tripRayPos.x + time.x * 2.2, tripRayPos.y + time.x * 5.5, tripRayPos.z + time.x * 10.0));//sin(tripRayPos.y * 5.0 + time.z);
+	float displacement1 = sin(tripRayPos.y * 5.0 + time.y) * 0.5 - cos(tripRayPos.x * 12.5 + time.y * 1.4) * 0.25 + displacement * 0.5;
+	float displacement2 = sin(tripRayPos.x*0.13 * time.w) + sin(tripRayPos.y*0.4 * time.z) + sin(tripRayPos.z*0.2 * time.y);
+
+	float clouds = cloud(tripRayPos);
+	
+	float cloudsExp = min(2*pow(clouds,3.0),1.0);
+
+	result.dis = cube(tripRayPos - vec3(0.0,0.0,10.0),vec3(14.0,8.0,1.0)) - displacement * 3.0;
+	result.col = mix(vec3(0.1),vec3(0.9),cloudsExp);
+	result.emit = cloudsExp;
+	result.shine = 0.0;
+	result.metal = 0.0;
+	
+	SurfaceData result1;
+	
+	result1.dis = cube(tripRayPos - vec3(0.0,0.0,15.0), vec3(14.0,8.0,1.0)) - displacement1 * 10.0;
+	result1.col = mix(HUEtoRGB(mod((time.y+tripRayPos.x)*0.01,1.0))+0.5,HUEtoRGB(mod((time.y+tripRayPos.x)*0.01,1.0))+0.5,cloudsExp + sin(tripRayPos.x) * 0.1) * 1.0;
+	result1.emit = 0.5;
+	result1.shine = 0.0;
+	result1.metal = 0.0;
+	
+	SurfaceData result2;
+
+	result2.dis = cube(tripRayPos - vec3(0.0,0.0,20.0 - sin(time.x - timeOffset*0.05)*25), vec3(14.0,8.0,1.0)) - displacement2;
+	result2.col = mix(vec3(0.1,0.4,0.8),vec3(0.8,0.4,0.1),tripRayPos.z*0.6) * 2.0;
+	result2.emit = 0.3;
+	result2.shine = 0.0;
+	result2.metal = 0.0;
+
+	return closest(closest(result,result1),result2);
+}
 SurfaceData surfaceComposite(in vec3 rayPos)
 {
 	SurfaceData result = Part0AlienOrb(rayPos); 
-	result = closest(result, Part1DancingOctohedrons(rayPos, 12.0));
-	result = closest(result, Part2Kaleidoscope(rayPos, 43.0));
-	result = closest(result, Part3CubeOcean(rayPos, 75.0));
+	if(time.y > 12.0 && time.y < 47.0)
+		result = closest(result, Part1DancingOctohedrons(rayPos, 12.0));
+	if(time.y > 38.0 && time.y < 80.0)
+		result = closest(result, Part2Kaleidoscope(rayPos, 43.0));
+	if(time.y > 70.0 && time.y < 110.0)
+		result = closest(result, Part3CubeOcean(rayPos, 75.0));
+	if(time.y >	102.0)
+		result = closest(result, Part4TrippyEffects(rayPos, 102.0));
 	return result;
 }
-VolumeData volumeComposite(in vec3 rayPos)
+VolumeData skyClouds(in vec3 rayPos)
 {
 	VolumeData result;
 	
@@ -354,8 +401,26 @@ VolumeData volumeComposite(in vec3 rayPos)
 
 	result.density = clamp((cloud(offsetPos*0.2)-0.35),0.0,1.0) * 0.2 * clamp(pow(offsetPos.y-10.0,3),0.0,1.0) * clamp(pow(41.0-offsetPos.y, 3) * 0.01,0.0,1.0);
 	result.density = mix(result.density,0.0,clamp(-time.y+75.0,0.0,1.0));
-	result.col = vec4(vec3(0.95),1.0);
+	result.col = vec4(vec3(0.95),1.0) * (cloud(offsetPos)*0.5 + 0.5);
 	result.absorb = 0.004;
+
+	return result;
+}
+VolumeData rainbowClouds(in vec3 rayPos)
+{
+	VolumeData result;
+	
+	vec3 offsetPos = rayPos + vec3(0.0,-4.0,0.0);
+
+	result.density = 1.0 * clamp(pow(offsetPos.y-5.0,3),0.0,1.0) * clamp(pow(7.0-offsetPos.y,3),0.0,1.0);
+
+	result.col = vec4(HUEtoRGB(cloud(vec3(offsetPos.xz,0.0))),1.0);
+
+	return result;
+}
+VolumeData volumeComposite(in vec3 rayPos)
+{
+	VolumeData result = skyClouds(rayPos);
 
 	return result;
 }
@@ -405,8 +470,9 @@ vec3 world2sky(in vec3 skyPos)
 vec3 worldComposite(in vec3 skyPos)
 {
 	float firstTrans = clamp(time.y-70-skyPos.y,0.0,1.0);
+	float secondTrans = clamp(time.y-102,0.0,1.0);
 
-	return mix(world0space(skyPos),world2sky(skyPos-vec3(0.0,firstTrans-1.0,0.0)), firstTrans);
+	return mix(mix(world0space(skyPos),world2sky(skyPos-vec3(0.0,firstTrans-1.0,0.0)), firstTrans),vec3(0.0),secondTrans);
 }
 void main()
 {
@@ -440,6 +506,8 @@ void main()
             break;
     }
 
+#ifdef RENDER_VOLUME
+
 	VolumeData volumeResult;
 	volumeResult.col = vec4(0.0);
 	volumeResult.density = 0.0;
@@ -461,7 +529,9 @@ void main()
 	volumeResult.col /= stepCount;
 	volumeResult.col.a *= volumeResult.density;
 
-    vec3 rayPos = rayOrigin + rayDir * totalResult.dis;
+#endif
+    
+	vec3 rayPos = rayOrigin + rayDir * totalResult.dis;
     vec3 normal = calcNormal(rayPos);
     vec3 reflectRayDir = reflect(rayDir, normal);
     vec3 reflectRayOrigin = rayPos + reflectRayDir * totalResult.dis;
@@ -503,7 +573,7 @@ void main()
                 (totalResult.emit + specular + reflectCol + lambert * (1.0-totalResult.metal) + 
                  vec3(0.01,0.01,0.01)) + clamp(reflectCol - 0.75,0.0,1.0),1.0);
 	}
-
+#ifdef RENDER_VOLUME
 	//apply volume to FragColor
 	{
 		//vec3 normal = rayDir;
@@ -511,9 +581,9 @@ void main()
 		vec3 fakeIndirect = world2sky(vec3(0.0,1.0,0.0));
 		//vec3 subsurface = clamp(vec3(dot(-normal, sun)) - vec3(volumeResult.absorb), vec3(0.0),vec3(1.0));
 
-		FragColor = mix(FragColor, vec4(mix(volumeResult.col.rgb + fakeIndirect,vec3(0.0,0.2,0.4),clamp(volumeResult.absorb,0.0,1.0)),1.0), volumeResult.col.a);
+		FragColor = mix(FragColor, vec4(mix(volumeResult.col.rgb + fakeIndirect,vec3(0.0,0.2,0.4),clamp(volumeResult.absorb,0.0,1.0)),1.0), clamp(volumeResult.col.a,0.0,1.0));
 	}
-
+#endif
 	//fade to and from black
 	{
 		FragColor = mix(vec4(vec3(0.0),1.0), FragColor, sCurve(clamp((time.y-2.0)*0.4,0.0,1.0)));
