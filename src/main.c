@@ -4,9 +4,21 @@
 #include <glad/gl.h>
 #include <GLFW/glfw3.h>
 
+#include <SDL3/SDL.h>
+
 #define SCREEN_WIDTH 1920
 #define SCREEN_HEIGHT 1080
 #define PROGRAM_NAME "PwCRevision2025"
+
+const char *musicFile = "../assets/music.wav";
+
+bool loadMusic();
+
+void beginPlayMusic();
+
+void closeMusic();
+
+void frameUpdateMusic();
 
 void framebuffer_size_callback(GLFWwindow* window, int width, int height);
 
@@ -48,6 +60,18 @@ GLint timeLoc = -1;
 
 int main()
 {
+	//Initialize SDL: Audio Only
+	if(SDL_Init(SDL_INIT_AUDIO) == false)
+	{
+		printf("Failed to Initialize SDL with Audio\r\n");
+		return -1;
+	}
+	//Load Music
+	if(loadMusic() == false)
+	{
+		return -1;
+	}
+
 	//initialize and make window
 	glfwInit();
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
@@ -108,12 +132,16 @@ int main()
 	glEnableVertexAttribArray(0);  
 
 	glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+	
+	beginPlayMusic();
 
 	float timeArray[4] = {-1};
 	int lastSecond = 0;
 	int fps = 0;
 	while(!glfwWindowShouldClose(window))
 	{
+		if(lastSecond > 5)
+			frameUpdateMusic();
 		//begin render
 
 		//paint window color
@@ -162,9 +190,10 @@ void framebuffer_size_callback(GLFWwindow* window, int width, int height)
 
 void inputCallback(GLFWwindow *window, int key, int scancode, int action, int mods)
 {
-	if(key == GLFW_KEY_ESCAPE)
+	if(key == GLFW_KEY_ESCAPE){
+		closeMusic();
 		glfwSetWindowShouldClose(window, true);
-	
+	}
 	if(key == GLFW_KEY_F11 && action == GLFW_PRESS)
 		ToggleFullScreen(window);
 }
@@ -221,20 +250,23 @@ unsigned int loadShader(const char* vertexShader, const char* fragmentShader)
 		return -1;
 	}
 	long int vertFileSize = getFileSize(vertFilePtr);
-	char vertexShaderCodeArray[vertFileSize];
+	char vertexShaderCodeArray[vertFileSize + 1];
 
-	char next = '\0';
+	int next = 0;
 	int index = 0;
 	while(next != EOF)
 	{
-		next = fgetc(vertFilePtr);
-		vertexShaderCodeArray[index] = next;
+		next = fgetc(vertFilePtr);		
+		if(next == EOF)
+			vertexShaderCodeArray[index] = 0;
+		else
+			vertexShaderCodeArray[index] = next;
 		index++;
 	}
 	
-	vertexShaderCodeArray[index] = '\0';
-
-	const char* vertexShaderCode = &vertexShaderCodeArray[0];
+	fclose(vertFilePtr);
+	
+	const char* vertexShaderCode = vertexShaderCodeArray;
 
 	unsigned int vertexID = glCreateShader(GL_VERTEX_SHADER);
 	glShaderSource(vertexID, 1, &vertexShaderCode, NULL);
@@ -245,7 +277,7 @@ unsigned int loadShader(const char* vertexShader, const char* fragmentShader)
 	if(!success)
 	{
 		glGetShaderInfoLog(vertexID, 512, NULL, infoLog);
-		printf("ERROR::SHADER::FRAGMENT::COMPILATION_FAILED\n%s\n", infoLog);
+		printf("ERROR::SHADER::VERTEX::COMPILATION_FAILED\n%s\n", infoLog);
 		return -1;
 	}
 
@@ -255,20 +287,23 @@ unsigned int loadShader(const char* vertexShader, const char* fragmentShader)
 		return -1;
 	}
 	long int fileSize = getFileSize(filePtr);
-	char fragmentShaderCodeArray[fileSize];
+	char fragmentShaderCodeArray[fileSize + 1];
 
-	next = '\0';
+	next = 0;
 	index = 0;
 	while(next != EOF)
 	{
 		next = fgetc(filePtr);
-		fragmentShaderCodeArray[index] = next;
+		if(next == EOF)
+			fragmentShaderCodeArray[index] = 0;
+		else
+			fragmentShaderCodeArray[index] = next;
 		index++;
 	}
 
-	fragmentShaderCodeArray[index] = '\0';
+	fragmentShaderCodeArray[index] = 0;
 
-	const char* fragmentShaderCode = &fragmentShaderCodeArray[0];
+	const char* fragmentShaderCode = fragmentShaderCodeArray;
 
 	unsigned int fragmentID = glCreateShader(GL_FRAGMENT_SHADER);
 	glShaderSource(fragmentID, 1, &fragmentShaderCode, NULL);
@@ -330,4 +365,44 @@ long int getFileSize(FILE *filePtr)
 	}
 
 	return filePos;
+}
+
+static SDL_AudioStream *stream = NULL;
+static Uint8 *wav_data = NULL;
+static Uint32 wav_data_len = 0;
+//TODO : Put in an Audio.c file
+bool loadMusic()
+{
+	Uint32 length;
+	Uint8 * buffer;
+	SDL_AudioSpec spec;
+
+	if (SDL_LoadWAV(musicFile, &spec, &wav_data, &wav_data_len) == false)
+	{
+		printf("Failed to Load WAV at %s", musicFile);
+		return false;
+	}
+	
+	stream = SDL_OpenAudioDeviceStream(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, &spec, NULL, NULL);	
+	if(stream == false)
+	{
+		printf("Failed to open music");
+		return false;
+	}
+	return true;
+}
+void beginPlayMusic()
+{
+	SDL_ResumeAudioStreamDevice(stream);
+}
+void frameUpdateMusic()
+{
+	if (SDL_GetAudioStreamQueued(stream) < (int)wav_data_len) {
+        /* feed more data to the stream. It will queue at the end, and trickle out as the hardware needs more data. */
+        SDL_PutAudioStreamData(stream, wav_data, wav_data_len);
+    }
+}
+void closeMusic()
+{
+	SDL_free(wav_data);
 }

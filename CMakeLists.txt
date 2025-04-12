@@ -1,5 +1,8 @@
-cmake_minimum_required(VERSION 3.0.0)
-project(PwCRevision2025 LANGUAGES C VERSION 0.0.0)
+cmake_minimum_required(VERSION 3.5.0)
+
+set( CMAKE_C_COMPILER "gcc" )
+
+project(PwCRevision2025 LANGUAGES C VERSION 3.5.0)
 
 set(CMAKE_C_STANDARD 99)
 set(CMAKE_C_STANDARD_REQUIRED ON)
@@ -12,16 +15,25 @@ set(GLFW_INSTALL OFF CACHE BOOL "" FORCE)           # Don't build Installation I
 set(GLFW_USE_HYBRID_HPG ON CACHE BOOL "" FORCE)     # Add variables to use High Performance Graphics Card if available
 add_subdirectory(libs/glfw)                       # Build the GLFW project to use later as a library
 
+if (UNIX)
+        set(SDL_VIDEO_DRIVER x11)
+        set(SDL_WAYLAND OFF)
+        set(SDL_WAYLAND_SHARED OFF)
+        set(SDL_UNIX_CONSOLE_BUILD ON)
+endif (UNIX)
+add_subdirectory(libs/SDL EXCLUDE_FROM_ALL)
+
 set(LIBRARIES libs/glad/src/gl.c)
 
 # Define the directories in which to search for the included headers
 include_directories(
         src
         libs/glfw/include
-	libs/glad/include
+        libs/glad/include
+        libs/SDL/include
 )
 
 add_executable(${PROJECT_NAME} src/main.c ${LIBRARIES})
 
-target_link_libraries(${PROJECT_NAME} glfw)
+target_link_libraries(${PROJECT_NAME} glfw SDL3::SDL3)
 

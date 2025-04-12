@@ -8,8 +8,8 @@ varying vec3 rayOrigin;
 uniform vec2 viewportSize;
 uniform vec4 time;
 
-const float MAX_MARCH_DIS = 100.0;
-const int MAX_MARCH_STEPS = 64;
+const float MAX_MARCH_DIS = 200.0;
+const int MAX_MARCH_STEPS = 256;
 const int CLOUD_RESOLUTION = 64;
 
 #define PI 3.1415927
@@ -285,6 +285,10 @@ SurfaceData Part3CubeOcean(in vec3 rayPos, in float timeOffset)
 {
 	SurfaceData result;
 	
+	result.dis = MAX_MARCH_DIS;
+	if(rayPos.y > time.y || length(rayPos) > 100)
+		return result;
+	
 	vec3 offsetPos = rayPos + vec3(0.0,max(8.0,(-time.y+timeOffset)*4.0 + 68.0),time.w*3);
 
 	offsetPos.y = offsetPos.y - max(0.0,(time.y-timeOffset-25.0)*4.0);
@@ -294,9 +298,6 @@ SurfaceData Part3CubeOcean(in vec3 rayPos, in float timeOffset)
 	
 	vec3 cubesID = round(offsetPos/spacing);
 	vec3 cubesOff = sign(offsetPos - spacing * cubesID);
-	result.dis = MAX_MARCH_DIS;
-	if(rayPos.y > time.y)
-		return result;
 
 	for(int i=0; i<2; i++)
 	for(int j=0; j<2; j++)
@@ -489,7 +490,7 @@ void main()
     totalResult.dis = 0.0;
 
     SurfaceData reflectResult;
-    reflectResult.dis = 0.0;
+    reflectResult.dis = MAX_MARCH_DIS;
     //directional light
     for(int i = 0; i < MAX_MARCH_STEPS; i++)
     {
@@ -544,6 +545,7 @@ void main()
 	{
 		worldReflect += worldComposite(mix(reflectRayDir,noise3D(reflectRayDir * (1000 + i * 11)), totalRough * 0.5)); 
 	}
+
 	worldReflect = worldReflect / 32.0;
 
 	const vec3 sun = vec3(0.5,0.8,-0.7);
@@ -568,6 +570,7 @@ void main()
 		reflectResult.col = reflectResult.dis >= MAX_MARCH_DIS ?  worldReflect : reflectResult.col;
 
 		vec3 reflectCol = reflectResult.col;// * totalResult.shine;
+		FragColor = vec4(reflectResult.col,1.0);
 
 		FragColor = vec4(vec3(totalResult.col) * 
                 (totalResult.emit + specular + reflectCol + lambert * (1.0-totalResult.metal) + 
