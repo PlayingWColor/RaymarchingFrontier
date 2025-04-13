@@ -8,7 +8,7 @@
 
 #define SCREEN_WIDTH 1920
 #define SCREEN_HEIGHT 1080
-#define PROGRAM_NAME "PwCRevision2025"
+#define PROGRAM_NAME "Playing with Color - Raymarching Frontier"
 
 const char *musicFile = "../assets/music.wav";
 
@@ -77,6 +77,7 @@ int main()
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
 	glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+	glfwWindowHint(GLFW_AUTO_ICONIFY, GLFW_FALSE);	
 	
 	GLFWwindow* window = glfwCreateWindow(SCREEN_WIDTH, SCREEN_HEIGHT, 
 											PROGRAM_NAME, NULL, NULL);
