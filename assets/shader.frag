@@ -13,9 +13,9 @@ const int MAX_MARCH_STEPS = 256;
 const int CLOUD_RESOLUTION = 64;
 
 const float REFL_MAX_MARCH_DIS = 50.0;
-const int REFL_MAX_MARCH_STEPS = 64;
+const int REFL_MAX_MARCH_STEPS = 16;
 const int REFL_MAX = 1;
-const int REFL_WORLD_ITER = 32;
+const int REFL_ITER = 32;
 
 #define PI 3.1415927
 #define M1 15973346     //1719413*929
@@ -175,7 +175,7 @@ SurfaceData Part0AlienOrb(in vec3 rayPos)
 	result.dis = sphere(pos + rayPos, 0.5) + displacement * 0.55;
 	result.col = vec3(0.2,0.7,0.8);
 	result.emit = clamp(-0.2 + displacement,0.5,1.0);
-	result.shine = 0.8;
+	result.shine = 0.95;
 	result.metal = 0.0;
 
 	return result;
@@ -228,9 +228,9 @@ SurfaceData Part1DancingOctohedrons(in vec3 rayPos, in float timeOffset)
 	result = closest(result, result2);
 	result = closest(result, result3);
 
-	result.emit = 0.3;
+	result.emit = 0.05;
 	result.shine = 0.98;
-	result.metal = 0.0;
+	result.metal = 1.0;
 
 	return result;
 }
@@ -499,8 +499,6 @@ void main()
     SurfaceData totalResult;
     totalResult.dis = 0.0;
 
-    SurfaceData reflectResult;
-    reflectResult.dis = MAX_MARCH_DIS;
     //directional light
     for(int i = 0; i < MAX_MARCH_STEPS; i++)
     {
@@ -549,33 +547,9 @@ void main()
 	
 	float totalRough = 1.0 - totalResult.shine;
 
+    SurfaceData reflectResult;
     reflectResult.col = vec3(1.0);
 	vec3 worldReflect = vec3(0);
-#ifdef SELF_REFLECT 
-	for(int ri = 0; ri < REFL_MAX; ri++)
-	{
-		//raymarching
-		for( int i = 0; i < REFL_MAX_MARCH_STEPS; i++)
-		{
-			vec3 rayPos = reflectRayOrigin + reflectRayDir * reflectResult.dis;
-			//float dis = sphere(ray_position, 0.5);
-			SurfaceData result = surfaceComposite(rayPos);
-			reflectResult.dis += result.dis;
-			reflectResult.col *= result.col;
-
-			
-			if(result.dis < 0.0001 || reflectResult.dis > REFL_MAX_MARCH_DIS)
-				break;
-		}
-		
-		if(reflectResult.dis > REFL_MAX_MARCH_DIS)
-			break;
-		vec3 rayPosition = reflectRayOrigin + reflectRayDir * reflectResult.dis;
-		vec3 normal = calcNormal(rayPosition);
-		reflectRayDir = reflect(reflectRayDir, normal);
-		vec3 reflectRayOrigin = rayPosition + reflectRayDir * reflectResult.dis;
-	}
-#endif
 	
 
 	const vec3 sun = vec3(0.5,0.8,-0.7);
@@ -591,12 +565,42 @@ void main()
 		
 		float fresnel = clamp(dot(normal, vec3(0.0,0.0,1.0)),0.0,1.0);
 		float roughness = totalRough * 0.5 * mix(1.0-fresnel, 1.0, totalResult.metal);
-		for(int i = 0; i < REFL_WORLD_ITER; i++)
+		for(int i = 0; i < REFL_ITER; i++)
 		{
-			worldReflect += worldComposite(mix(reflectRayDir,noise3D(reflectRayDir * (1000 + i * 11)), roughness)); 
+			reflectRayDir = mix(reflectRayDir,noise3D(reflectRayDir * (1000 + i * 11)), roughness);
+#ifdef SELF_REFLECT 
+			int reflCount = 0;
+			reflectResult.col = vec3(1.0);
+			for(int ri = 0; ri < REFL_MAX; ri++)
+			{
+				//raymarching
+				for( int x = 0; x < REFL_MAX_MARCH_STEPS; x++)
+				{
+					vec3 rayPos = reflectRayOrigin + reflectRayDir * reflectResult.dis;
+					SurfaceData result = surfaceComposite(rayPos);
+					reflectResult.dis += result.dis;
+					reflectResult.col *= result.col;
+
+					
+					if(result.dis < 0.0001 || reflectResult.dis > REFL_MAX_MARCH_DIS)
+						break;
+				}
+				
+				if(reflectResult.dis > REFL_MAX_MARCH_DIS)
+					break;
+				vec3 rayPos = reflectRayOrigin + reflectRayDir * reflectResult.dis;
+				vec3 normal = calcNormal(rayPos);
+				reflectRayDir = reflect(reflectRayDir, normal);
+				reflectRayDir = mix(reflectRayDir,noise3D(reflectRayDir * (1000 + i * 11)), roughness);
+				vec3 reflectRayOrigin = rayPos + reflectRayDir * reflectResult.dis;
+			}
+#endif
+			{			
+				worldReflect += reflectResult.col * worldComposite(reflectRayDir); 
+			}
 		}
 
-		worldReflect = worldReflect / float(REFL_WORLD_ITER);
+		worldReflect = worldReflect / float(REFL_ITER);
 	
 		float lambert = clamp(dot(normal, sun),0.0,1.0);
 
@@ -608,11 +612,11 @@ void main()
 		reflectResult.col *= worldReflect;
 
 		vec3 reflectCol = reflectResult.col;
-//		FragColor = vec4(,1.0);
+		//FragColor = vec4(reflectCol,1.0);
 
 		vec3 finalColor = mix(vec3(totalResult.col),vec3(1.0),fresnel);
         finalColor *= totalResult.emit + specular + reflectCol + lambert * (1.0-totalResult.metal);// + vec3(0.01,0.01,0.01);
-		//finalColor += clamp(reflectCol - 0.75,0.0,1.0);
+		finalColor += clamp(reflectCol - 0.75,0.0,1.0);
 		FragColor = vec4(finalColor,1.0);	
 		//FragColor = vec4(vec3(fresnel),1.0);
 
