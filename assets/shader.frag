@@ -8,14 +8,20 @@ varying vec3 rayOrigin;
 uniform vec2 viewportSize;
 uniform vec4 time;
 
-const float MAX_MARCH_DIS = 200.0;
+const float MAX_MARCH_DIS = 100.0;
 const int MAX_MARCH_STEPS = 256;
 const int CLOUD_RESOLUTION = 64;
+
+const float REFL_MAX_MARCH_DIS = 50.0;
+const int REFL_MAX_MARCH_STEPS = 64;
+const int REFL_MAX = 1;
+const int REFL_WORLD_ITER = 32;
 
 #define PI 3.1415927
 #define M1 15973346     //1719413*929
 #define M2 38120158     //140473*2467*11
 
+//#define SELF_REFLECT
 //#define RENDER_VOLUME
 
 struct SurfaceData
@@ -224,7 +230,7 @@ SurfaceData Part1DancingOctohedrons(in vec3 rayPos, in float timeOffset)
 
 	result.emit = 0.3;
 	result.shine = 0.98;
-	result.metal = 1.0;
+	result.metal = 0.0;
 
 	return result;
 }
@@ -367,7 +373,7 @@ SurfaceData Part4TrippyEffects(in vec3 rayPos, float timeOffset)
 	
 	result1.dis = cube(tripRayPos - vec3(0.0,0.0,15.0), vec3(14.0,8.0,1.0)) - displacement1 * 10.0;
 	result1.col = mix(HUEtoRGB(mod((time.y+tripRayPos.x)*0.01,1.0))+0.5,HUEtoRGB(mod((time.y+tripRayPos.x)*0.01,1.0))+0.5,cloudsExp + sin(tripRayPos.x) * 0.1) * 1.0;
-	result1.emit = 0.5;
+	result1.emit = 0.2;
 	result1.shine = 0.0;
 	result1.metal = 0.0;
 	
@@ -375,7 +381,7 @@ SurfaceData Part4TrippyEffects(in vec3 rayPos, float timeOffset)
 
 	result2.dis = cube(tripRayPos - vec3(0.0,0.0,20.0 - sin(time.x - timeOffset*0.05)*25), vec3(14.0,8.0,1.0)) - displacement2;
 	result2.col = mix(vec3(0.1,0.4,0.8),vec3(0.8,0.4,0.1),tripRayPos.z*0.6) * 2.0;
-	result2.emit = 0.3;
+	result2.emit = 0.1;
 	result2.shine = 0.0;
 	result2.metal = 0.0;
 
@@ -386,8 +392,8 @@ SurfaceData surfaceComposite(in vec3 rayPos)
 	SurfaceData result = Part0AlienOrb(rayPos); 
 	if(time.y > 12.0 && time.y < 47.0)
 		result = closest(result, Part1DancingOctohedrons(rayPos, 12.0));
-	if(time.y > 38.0 && time.y < 80.0)
-		result = closest(result, Part2Kaleidoscope(rayPos, 43.0));
+	if(time.y > 40.0 && time.y < 80.0)
+		result = closest(result, Part2Kaleidoscope(rayPos, 45.0));
 	if(time.y > 70.0 && time.y < 110.0)
 		result = closest(result, Part3CubeOcean(rayPos, 75.0));
 	if(time.y >	102.0)
@@ -468,12 +474,16 @@ vec3 world2sky(in vec3 skyPos)
 
 	return background;
 }
+vec3 world3sky(in vec3 skyPos)
+{
+	return mix(vec3(0.2),vec3(1.0),clamp(sin(skyPos.x*5) * sin(skyPos.y*5),0.0,1.0)) * clamp((175.0-time.y)*0.05,0.0,1.0);
+}
 vec3 worldComposite(in vec3 skyPos)
 {
 	float firstTrans = clamp(time.y-70-skyPos.y,0.0,1.0);
 	float secondTrans = clamp(time.y-102,0.0,1.0);
 
-	return mix(mix(world0space(skyPos),world2sky(skyPos-vec3(0.0,firstTrans-1.0,0.0)), firstTrans),vec3(0.0),secondTrans);
+	return mix(mix(world0space(skyPos),world2sky(skyPos-vec3(0.0,firstTrans-1.0,0.0)), firstTrans),world3sky(skyPos),secondTrans);
 }
 void main()
 {
@@ -539,14 +549,34 @@ void main()
 	
 	float totalRough = 1.0 - totalResult.shine;
 
-    vec3 worldReflect = vec3(0);
-  	
-	for(int i = 0; i < 32; i++)
+    reflectResult.col = vec3(1.0);
+	vec3 worldReflect = vec3(0);
+#ifdef SELF_REFLECT 
+	for(int ri = 0; ri < REFL_MAX; ri++)
 	{
-		worldReflect += worldComposite(mix(reflectRayDir,noise3D(reflectRayDir * (1000 + i * 11)), totalRough * 0.5)); 
-	}
+		//raymarching
+		for( int i = 0; i < REFL_MAX_MARCH_STEPS; i++)
+		{
+			vec3 rayPos = reflectRayOrigin + reflectRayDir * reflectResult.dis;
+			//float dis = sphere(ray_position, 0.5);
+			SurfaceData result = surfaceComposite(rayPos);
+			reflectResult.dis += result.dis;
+			reflectResult.col *= result.col;
 
-	worldReflect = worldReflect / 32.0;
+			
+			if(result.dis < 0.0001 || reflectResult.dis > REFL_MAX_MARCH_DIS)
+				break;
+		}
+		
+		if(reflectResult.dis > REFL_MAX_MARCH_DIS)
+			break;
+		vec3 rayPosition = reflectRayOrigin + reflectRayDir * reflectResult.dis;
+		vec3 normal = calcNormal(rayPosition);
+		reflectRayDir = reflect(reflectRayDir, normal);
+		vec3 reflectRayOrigin = rayPosition + reflectRayDir * reflectResult.dis;
+	}
+#endif
+	
 
 	const vec3 sun = vec3(0.5,0.8,-0.7);
 
@@ -558,23 +588,34 @@ void main()
     {
         vec3 rayPos = rayOrigin + rayDir * totalResult.dis;
 		vec3 normal = calcNormal(rayPos);
+		
+		float fresnel = clamp(dot(normal, vec3(0.0,0.0,1.0)),0.0,1.0);
+		float roughness = totalRough * 0.5 * mix(1.0-fresnel, 1.0, totalResult.metal);
+		for(int i = 0; i < REFL_WORLD_ITER; i++)
+		{
+			worldReflect += worldComposite(mix(reflectRayDir,noise3D(reflectRayDir * (1000 + i * 11)), roughness)); 
+		}
 
-
+		worldReflect = worldReflect / float(REFL_WORLD_ITER);
+	
 		float lambert = clamp(dot(normal, sun),0.0,1.0);
 
 		vec3 halfDir = normalize(sun - rayDir);
 
-		float specular = pow(clamp(dot(normal, halfDir),0.0,1.0),totalResult.shine * 16.0) * totalResult.shine * 4.0;
+		float specular = max(0.0,pow(clamp(dot(normal, halfDir),0.0,1.0),totalResult.shine * 16.0) * totalResult.shine * 4.0);
 		specular *= lambert;
 
-		reflectResult.col = reflectResult.dis >= MAX_MARCH_DIS ?  worldReflect : reflectResult.col;
+		reflectResult.col *= worldReflect;
 
-		vec3 reflectCol = reflectResult.col;// * totalResult.shine;
-		FragColor = vec4(reflectResult.col,1.0);
+		vec3 reflectCol = reflectResult.col;
+//		FragColor = vec4(,1.0);
 
-		FragColor = vec4(vec3(totalResult.col) * 
-                (totalResult.emit + specular + reflectCol + lambert * (1.0-totalResult.metal) + 
-                 vec3(0.01,0.01,0.01)) + clamp(reflectCol - 0.75,0.0,1.0),1.0);
+		vec3 finalColor = mix(vec3(totalResult.col),vec3(1.0),fresnel);
+        finalColor *= totalResult.emit + specular + reflectCol + lambert * (1.0-totalResult.metal);// + vec3(0.01,0.01,0.01);
+		//finalColor += clamp(reflectCol - 0.75,0.0,1.0);
+		FragColor = vec4(finalColor,1.0);	
+		//FragColor = vec4(vec3(fresnel),1.0);
+
 	}
 #ifdef RENDER_VOLUME
 	//apply volume to FragColor
