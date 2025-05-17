@@ -90,6 +90,11 @@ float cloud(in vec3 x)
 	return noise(x) * 0.5 + noise(x * 2.0) * 0.25 + noise(x * 4.0) * 0.125 + noise(x * 8.0) * 0.0625;
 }
 
+float quickCloud(in vec3 pos)
+{
+	return 1.0+sin(pos.x) * sin(pos.y) * sin(pos.z);
+}
+
 float sCurve(float t)
 {
 	return (-cos(PI*t) + 1) * 0.5f;
@@ -153,7 +158,7 @@ float cube(in vec3 position, in vec3 bounds)
     vec3 d = abs(position) - bounds;
     return min(max(d.x,max(d.y,d.z)),0.0) + length(max(d,0.0));
 }
-//cube by Inigo Quilez
+//octahedron by Inigo Quilez
 float octahedron( vec3 position, float size)
 {
   position = abs(position);
@@ -287,6 +292,19 @@ float waveDisplacement(vec2 pos, vec2 dir, float freq, float t)
 {
 	return exp(sin(dot(dir,pos) * freq + t))-1.5;
 }
+SurfaceData skyCloudsSurface(in vec3 rayPos)
+{
+	SurfaceData result;
+	
+	result.dis = quickCloud(rayPos);// * 0.2 * clamp(pow(offsetPos.y-10.0,3),0.0,1.0) * clamp(pow(41.0-offsetPos.y, 3) * 0.01,0.0,1.0);
+	//result.dis = mix(result.dis,0.0,clamp(-time.y+75.0,0.0,1.0));
+	result.col = vec3(0.95);// * (cloud(offsetPos)*0.5 + 0.5);
+	result.emit = 0.0;
+	result.shine = 0.0;
+	result.metal = 0.0;
+
+	return result;
+}
 SurfaceData Part3CubeOcean(in vec3 rayPos, in float timeOffset)
 {
 	SurfaceData result;
@@ -300,7 +318,7 @@ SurfaceData Part3CubeOcean(in vec3 rayPos, in float timeOffset)
 	offsetPos.y = offsetPos.y - max(0.0,(time.y-timeOffset-25.0)*4.0);
 
 	float ylimit = 1.0;
-	vec3 spacing = vec3(2.0);
+	vec3 spacing = vec3(4.0);
 	
 	vec3 cubesID = round(offsetPos/spacing);
 	vec3 cubesOff = sign(offsetPos - spacing * cubesID);
@@ -316,14 +334,14 @@ SurfaceData Part3CubeOcean(in vec3 rayPos, in float timeOffset)
 		vec2 gridPos = gridPos3D.xz;
 		vec3 color = noise3D(vec3(gridPos+vec2(0.25),1.0));
 
-		float displacement = waveDisplacement(gridPos, vec2(0.4,0.6), 0.2, time.w)*0.025;
-		displacement += waveDisplacement(gridPos, vec2(0.1,-0.9), 1.2, time.w)*0.05;
-		displacement += waveDisplacement(gridPos, vec2(0.672,0.238), 1.8, time.w)*0.1;
-		displacement += waveDisplacement(gridPos, vec2(-0.81,0.19), 2.7, time.w)*0.2;
-		displacement += waveDisplacement(gridPos, vec2(0.45,-0.55), 3.4, time.w)*0.12;	
-		displacement += waveDisplacement(gridPos, vec2(0.3,-0.7), 6.0, time.w)*0.03;	
-		displacement += waveDisplacement(gridPos, vec2(-0.15,-0.85), 7.0, time.w)*0.02;	
-		displacement += waveDisplacement(gridPos, vec2(0.95,-0.05), 8.0, time.w)*0.04;	
+		float displacement = waveDisplacement(gridPos, vec2(0.4,0.6), 0.2, time.w)*0.05;
+		displacement += waveDisplacement(gridPos, vec2(0.1,-0.9), 1.2, time.w)*0.1;
+		displacement += waveDisplacement(gridPos, vec2(0.672,0.238), 1.8, time.w)*0.2;
+		displacement += waveDisplacement(gridPos, vec2(-0.81,0.19), 2.7, time.w)*0.4;
+		displacement += waveDisplacement(gridPos, vec2(0.45,-0.55), 3.4, time.w)*0.24;	
+		displacement += waveDisplacement(gridPos, vec2(0.3,-0.7), 6.0, time.w)*0.06;	
+		displacement += waveDisplacement(gridPos, vec2(-0.15,-0.85), 7.0, time.w)*0.04;	
+		displacement += waveDisplacement(gridPos, vec2(0.95,-0.05), 8.0, time.w)*0.08;	
 
 		vec3 halfColor = color - vec3(0.5);
 
@@ -333,7 +351,7 @@ SurfaceData Part3CubeOcean(in vec3 rayPos, in float timeOffset)
 		cubes = rotateZ(cubes, (halfColor.z) * (0.5 + time.x * halfColor.x), vec3(0.0));
 
 
-		float newDis = cube(cubes, vec3(0.8));
+		float newDis = cube(cubes, vec3(1.6));
 		if(newDis < result.dis)
 		{
 			result.dis = newDis;
@@ -392,9 +410,9 @@ SurfaceData surfaceComposite(in vec3 rayPos)
 	SurfaceData result = Part0AlienOrb(rayPos); 
 	if(time.y > 12.0 && time.y < 47.0)
 		result = closest(result, Part1DancingOctohedrons(rayPos, 12.0));
-	if(time.y > 40.0 && time.y < 80.0)
+	if(time.y > 40.0 && time.y < 72.0)
 		result = closest(result, Part2Kaleidoscope(rayPos, 45.0));
-	if(time.y > 70.0 && time.y < 110.0)
+	if(time.y > 70.0 && time.y < 102.0)
 		result = closest(result, Part3CubeOcean(rayPos, 75.0));
 	if(time.y >	102.0)
 		result = closest(result, Part4TrippyEffects(rayPos, 102.0));
@@ -471,6 +489,11 @@ vec3 world2sky(in vec3 skyPos)
 {
 	vec3 background = mix(vec3(0.475,0.745,0.949),vec3(0.475,0.745,0.949),clamp(skyPos.y*10.0+2.0,0.0,1.0));
 	background = mix(background, vec3(0.375,0.375,0.778),clamp(skyPos.y - 0.0, 0.0, 1.0));
+	background = mix(background, vec3(1.0,1.0,1.0), cloud(vec3(skyPos.z,skyPos.x,1.0)*10.0*max(0.0,skyPos.y))-0.5);
+	
+	float centerLength = length(vec2(skyPos.x,skyPos.z));
+
+	background = mix(background, noise3D(vec3(skyPos.x/skyPos.y*2.5,skyPos.z/skyPos.y*2.5,1.0)*10.0), clamp(-skyPos.y+centerLength*0.2,0.0,1.0));
 
 	return background;
 }
